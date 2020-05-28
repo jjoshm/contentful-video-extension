@@ -18,65 +18,77 @@ import './index.css';
 
 /**
  * To use this Extension create a Content Type with the following fields:
- *  platform: Short text
- *  videoId: Short text
- *  options: JSON Object
+ *  platform: Short text (add required validation)
+ *  videoId: Short text (add required validation)
+ *  youtubeOptions: JSON Object
+ *  customOptions: JSON Object
  * 
  *  See https://github.com/contentful/create-contentful-extension/blob/master/docs/examples/entry-editor-content-model.json for details.
  */
 
-interface AppProps {
+interface IAppProps {
   sdk: EditorExtensionSDK;
 }
 
-interface AppState {
-  platform: string;
-  videoId: string;
-  options?: any;
+interface IYoutubeOptions {
+  default: { [key: string]: { options: { [key: string]: string | number } } },
+  custom: { [key: string]: { options: { [key: string]: string | number } } }
 }
 
-interface YoutubeParameters {
-  [key: string]: {
-    options: { [key: string]: string | number }
+interface IYoutubeOptionJSON {
+  default: { [key: string]: string },
+  custom: { [key: string]: string }
+}
+
+interface IAppState {
+  platform: string;
+  videoId: string;
+  youtubeOptions?: IYoutubeOptionJSON;
+}
+
+const youtubeOptions: IYoutubeOptions = {
+  default: {
+    autoplay: {
+      options: {
+        'No Auto Play': 0,
+        'Auto Play': 1
+      }
+    },
+    color: { options: { 'white': 'white', 'red': 'red' } },
+    controls: { options: { 'Enable Controls': 1, 'Disabel Controls': 0 } },
+    loop: { options: { 'SinglePlay': 0, 'Loop': 1 } }
+  },
+
+  custom: {
+    mute: {
+      options: {
+        'Enable': 1,
+        'Disable': 0
+      }
+    }
   }
 }
 
-
-const youtubeParameter: YoutubeParameters = {
-  autoplay: {
-    options: {
-      'No Auto Play': 0,
-      'Auto Play': 1
-    }
-  },
-  color: { options: { 'white': 'white', 'red': 'red' } },
-  controls: { options: { 'Enable Controls': 1, 'Disabel Controls': 0 } },
-  loop: { options: { 'SinglePlay': 0, 'Loop': 1 } }
-};
-
-export class App extends React.Component<AppProps, AppState> {
-  constructor(props: AppProps) {
+export class App extends React.Component<IAppProps, IAppState> {
+  constructor(props: IAppProps) {
     super(props);
 
     this.state = {
       videoId: props.sdk.entry.fields.videoId.getValue(),
       platform: props.sdk.entry.fields.platform.getValue(),
-      options: props.sdk.entry.fields.options.getValue()
+      youtubeOptions: props.sdk.entry.fields.youtubeOptions.getValue()
     };
-
-    console.log(this.state)
   }
-
 
   onPlatformChangeHandler = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
     this.setState({ platform: value });
     if (value === 'instagram') {
-      this.setState({ options: undefined })
-      this.props.sdk.entry.fields.options.setValue(undefined);
+      this.setState({ youtubeOptions: undefined })
+      this.props.sdk.entry.fields.youtubeOptions.setValue(undefined);
     } else {
-      this.setState({ options: {} })
-      this.props.sdk.entry.fields.options.setValue({});
+      this.setState({ youtubeOptions: {custom: {}, default: {}} })
+      this.props.sdk.entry.fields.youtubeOptions.setValue({custom: {}, default: {}});
     }
     await this.props.sdk.entry.fields.platform.setValue(value);
   };
@@ -90,37 +102,59 @@ export class App extends React.Component<AppProps, AppState> {
   onVideoOptionChangeHandler = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     const name = event.target.name;
-    let options = await this.props.sdk.entry.fields.options.getValue() || {};
-    options[name] = value;
-    this.setState({ options: options })
-    await this.props.sdk.entry.fields.options.setValue(options);
-    console.log(this.state)
+    let options: IYoutubeOptionJSON = await this.props.sdk.entry.fields.youtubeOptions.getValue() || {};
+    if(name in youtubeOptions.default) {
+      options.default[name] = value;
+    } else {
+      options.custom[name] = value;
+    }
+
+    this.setState({ youtubeOptions: options })
+    await this.props.sdk.entry.fields.youtubeOptions.setValue(options);
   };
 
   YoutubePlayerOptions() {
-    return <FieldGroup row={false}>
-      {Object.keys(youtubeParameter).map(name => {
-        const options = youtubeParameter[name]['options']
+    let selects: JSX.Element[] = [];
 
-        let optionElements = [<Option value="default">Default</Option>];
-        for (const [key, value] of Object.entries(options)) {
-          optionElements.push(
-            <Option key={key} value={(value as number).toString()}>{key}</Option>
-          )
-        };
-        return (
-          <div>
-            <HelpText>{name}</HelpText>
-            <Select value={(this.state.options && name in this.state.options) ? this.state.options[name] : 'default'} name={name} onChange={this.onVideoOptionChangeHandler}>
-              {optionElements}
-            </Select>
-          </div>
-
+    Object.keys(youtubeOptions.default).map(name => {
+      const options = youtubeOptions.default[name]['options']
+      let optionElements = [<Option value="default">Default</Option>];
+      for (const [key, value] of Object.entries(options)) {
+        optionElements.push(
+          <Option key={key} value={(value as number).toString()}>{key}</Option>
         )
-      })}
+      };
+      selects.push(
+        <div>
+          <HelpText>{name}</HelpText>
+          <Select value={(this.state.youtubeOptions!.default && name in this.state.youtubeOptions!.default) ? this.state.youtubeOptions!.default[name] : 'default'} name={name} onChange={this.onVideoOptionChangeHandler}>
+            {optionElements}
+          </Select>
+        </div>)
+    });
+
+    Object.keys(youtubeOptions.custom).map(name => {
+      const options = youtubeOptions.custom[name]['options']
+      let optionElements = [<Option value="default">Default</Option>];
+      for (const [key, value] of Object.entries(options)) {
+        optionElements.push(
+          <Option key={key} value={(value as number).toString()}>{key}</Option>
+        )
+      };
+      selects.push(
+        <div>
+          <HelpText>{name}</HelpText>
+          <Select value={(this.state.youtubeOptions!.custom && name in this.state.youtubeOptions!.custom) ? this.state.youtubeOptions!.custom[name] : 'default'} name={name} onChange={this.onVideoOptionChangeHandler}>
+            {optionElements}
+          </Select>
+        </div>)
+    });
+
+
+    return <FieldGroup row={false}>
+      {selects}
     </FieldGroup>
   }
-
 
   render() {
     return (
