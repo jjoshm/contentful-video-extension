@@ -1,0 +1,5 @@
+{
+  "id": "video-extension",
+  "name": "video-extension",
+  "srcdoc": "./build/index.html"
+}
